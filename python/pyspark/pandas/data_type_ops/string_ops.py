@@ -31,7 +31,6 @@ from pyspark.pandas.data_type_ops.base import (
     _as_other_type,
     _as_string_type,
 )
-from pyspark.pandas.internal import InternalField
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import extension_dtypes, pandas_on_spark_type
 from pyspark.sql import Column
@@ -48,70 +47,56 @@ class StringOps(DataTypeOps):
         return "strings"
 
     def add(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType):
+        if isinstance(right, str):
+            return cast(
+                SeriesOrIndex,
+                left._with_new_scol(
+                    F.concat(left.spark.column, SF.lit(right)), field=left._internal.data_fields[0]
+                ),
+            )
+        elif isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType):
             return column_op(F.concat)(left, right)
-        elif isinstance(right, str):
-            return column_op(F.concat)(left, SF.lit(right))
         else:
-            raise TypeError("string addition can only be applied to string series or literals.")
-
-    def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("subtraction can not be applied to string series or literals.")
+            raise TypeError("Addition can not be applied to given types.")
 
     def mul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if isinstance(right, str):
-            raise TypeError("multiplication can not be applied to a string literal.")
-
-        if (
+        if isinstance(right, int):
+            return cast(
+                SeriesOrIndex,
+                left._with_new_scol(
+                    SF.repeat(left.spark.column, right), field=left._internal.data_fields[0]
+                ),
+            )
+        elif (
             isinstance(right, IndexOpsMixin)
             and isinstance(right.spark.data_type, IntegralType)
             and not isinstance(right.dtype, CategoricalDtype)
-        ) or isinstance(right, int):
+        ):
             return column_op(SF.repeat)(left, right)
         else:
-            raise TypeError("a string series can only be multiplied to an int series or literal")
-
-    def truediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("division can not be applied on string series or literals.")
-
-    def floordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("division can not be applied on string series or literals.")
-
-    def mod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("modulo can not be applied on string series or literals.")
-
-    def pow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("exponentiation can not be applied on string series or literals.")
+            raise TypeError("Multiplication can not be applied to given types.")
 
     def radd(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, str):
             return cast(
                 SeriesOrIndex,
-                left._with_new_scol(F.concat(SF.lit(right), left.spark.column)),  # TODO: dtype?
+                left._with_new_scol(
+                    F.concat(SF.lit(right), left.spark.column), field=left._internal.data_fields[0]
+                ),
             )
         else:
-            raise TypeError("string addition can only be applied to string series or literals.")
-
-    def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("subtraction can not be applied to string series or literals.")
+            raise TypeError("Addition can not be applied to given types.")
 
     def rmul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, int):
-            return column_op(SF.repeat)(left, right)
+            return cast(
+                SeriesOrIndex,
+                left._with_new_scol(
+                    SF.repeat(left.spark.column, right), field=left._internal.data_fields[0]
+                ),
+            )
         else:
-            raise TypeError("a string series can only be multiplied to an int series or literal")
-
-    def rtruediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("division can not be applied on string series or literals.")
-
-    def rfloordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("division can not be applied on string series or literals.")
-
-    def rpow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("exponentiation can not be applied on string series or literals.")
-
-    def rmod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("modulo can not be applied on string series or literals.")
+            raise TypeError("Multiplication can not be applied to given types.")
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
@@ -147,8 +132,8 @@ class StringOps(DataTypeOps):
                     F.length(index_ops.spark.column) > 0
                 )
             return index_ops._with_new_scol(
-                scol.alias(index_ops._internal.data_spark_column_names[0]),
-                field=InternalField(dtype=dtype),
+                scol,
+                field=index_ops._internal.data_fields[0].copy(dtype=dtype, spark_type=spark_type),
             )
         elif isinstance(spark_type, StringType):
             return _as_string_type(index_ops, dtype)
